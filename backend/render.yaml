@@ -1,0 +1,21 @@
+# Render.com Deployment Configuration
+# AlgoRythm AI Europa - Created by AlgoRythm Tech
+
+services:
+  - type: web
+    name: rythmAI-europa-backend
+    env: python
+    region: oregon
+    plan: free
+    buildCommand: "pip install -r requirements.txt"
+    startCommand: "uvicorn algorythm_ai_backend:app --host 0.0.0.0 --port $PORT"
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.10"
+      - key: AUTH0_DOMAIN
+        sync: false
+      - key: AUTH0_API_AUDIENCE
+        sync: false
+      - key: MODEL_CACHE_DIR
+        value: "/opt/render/project/.cache"
+    autoDeploy: true

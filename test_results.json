@@ -1,0 +1,58 @@
+{
+  "timestamp": "2025-08-23T15:05:29.050106",
+  "results": {
+    "passed": [
+      "Response Variability",
+      "Input Size 10",
+      "Input Size 100",
+      "Input Size 500",
+      "Input Size 1000",
+      "Memory Stability",
+      "Invalid JSON",
+      "Missing Required Field",
+      "XSS Attempt"
+    ],
+    "failed": [
+      "Dynamic Computation",
+      "Context Retention",
+      "Root Endpoint",
+      "Chat Test 1",
+      "Chat Test 2",
+      "Chat Test 3",
+      "Chat Test 4",
+      "Chat Test 5",
+      "Search Endpoint",
+      "Language Understanding",
+      "Code Generation",
+      "Creativity",
+      "Multilingual",
+      "Input Size 5000",
+      "Concurrent Requests",
+      "Invalid Temperature",
+      "Negative Max Tokens",
+      "SQL Injection Attempt"
+    ],
+    "warnings": [
+      "Nonsense Handling",
+      "Reasoning"
+    ],
+    "hardcoded_indicators": [
+      "NO_COMPUTATION_ABILITY",
+      "NO_CONTEXT_RETENTION"
+    ]
+  },
+  "hardcoded_detection": {
+    "is_hardcoded": true,
+    "confidence": 70,
+    "indicators": [
+      "NO_COMPUTATION_ABILITY",
+      "NO_CONTEXT_RETENTION"
+    ]
+  },
+  "timing_data": [
+    22.76507258415222,
+    10.07413387298584,
+    15.796404838562012,
+    21.963040828704834
+  ]
+}

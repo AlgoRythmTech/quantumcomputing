@@ -1,0 +1,8 @@
+[
+  "tests/test_advanced_training_system.py::test_import_advanced_training_system",
+  "tests/test_photonai_backend.py::test_import_photonai_backend",
+  "tests/test_rythm_model_architecture.py::test_import_rythm_model_architecture",
+  "tests/test_setup.py::test_import_setup",
+  "tests/test_tokenizer_system.py::test_import_tokenizer_system",
+  "tests/test_train_rythm_model.py::test_import_train_rythm_model"
+]
