@@ -2,12 +2,6 @@ import React, { useState, useRef, useEffect } from 'react';
 import './App.css';
 import { chatAPI } from './services/api';
 
-// Auth0 Configuration - Will use env vars or defaults
-const AUTH0_DOMAIN = import.meta.env.VITE_AUTH0_DOMAIN || "dev-algorythm.us.auth0.com";
-const AUTH0_CLIENT_ID = import.meta.env.VITE_AUTH0_CLIENT_ID || "your-client-id";
-const AUTH0_REDIRECT_URI = window.location.origin;
-const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
-
 interface Message {
   id: string;
   text: string;
