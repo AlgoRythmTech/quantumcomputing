@@ -3,17 +3,6 @@ AlgoRythm Tech AI Backend - Production Ready System
 CEO & Founder: Sri Aasrith Souri Kompella
 Company: AlgoRythm Tech, Hyderabad - First teen-built AI startup
 """
-"""
-AlgoRythm Tech AI Backend - Production Ready System
-CEO & Founder: Sri Aasrith Souri Kompella
-Company: AlgoRythm Tech, Hyderabad - First teen-built AI startup
-"""
-"""
-AlgoRythm Tech AI Backend - Production Ready System
-CEO & Founder: Sri Aasrith Souri Kompella
-Company: AlgoRythm Tech, Hyderabad - First teen-built AI startup
-"""
-
 from fastapi import FastAPI, HTTPException, Depends, File, UploadFile, Form
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, StreamingResponse
@@ -21,7 +10,7 @@ from pydantic import BaseModel
 from typing import Optional, List, Dict, Any
 import torch
 import torch.nn as nn
-from transformers import AutoTokenizer, AutoModelForCausalLM, pipeline
+import torchvision.transforms as transforms
 import uvicorn
 import logging
 from datetime import datetime
@@ -46,9 +35,11 @@ import re
 from pathlib import Path
 import numpy as np
 import cv2
-from sentence_transformers import SentenceTransformer
-import faiss
-import pickle
+from transformers import AutoTokenizer
+
+# Import custom Rythm AI models
+from rythm_model_architecture import RythmForCausalLM, RythmConfig
+from tokenizer_system import RythmTokenizer, TokenizerConfig, create_tokenizer
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -60,9 +51,6 @@ app = FastAPI(
     description="Advanced AI system by AlgoRythm Tech - First teen-built AI startup",
     version="1.2.0"
 )
-
-# Add /health endpoint for frontend health check compatibility
-from datetime import datetime
 
 @app.get("/health")
 async def health():
@@ -86,8 +74,6 @@ app.add_middleware(
 model = None
 tokenizer = None
 vision_model = None
-embeddings_model = None
-knowledge_base = None
 
 # Conversation history storage (in production, use Redis or database)
 conversation_history = {}
@@ -114,7 +100,7 @@ class ChatRequest(BaseModel):
     search_web: Optional[bool] = False
     generate_pdf: Optional[bool] = False
     temperature: Optional[float] = 0.7
-    max_tokens: Optional[int] = 2048
+    max_tokens: Optional[int] = None
 
 class ChatResponse(BaseModel):
     response: str
@@ -131,32 +117,67 @@ class WebSearchRequest(BaseModel):
     num_results: Optional[int] = 5
 
 def initialize_models():
-    """Initialize all AI models"""
-    global model, tokenizer, vision_model, embeddings_model
+    """Initialize Rythm AI models with robust error handling"""
+    global model, tokenizer, vision_model
     
     try:
         logger.info("Initializing AlgoRythm AI models...")
         
-        # Load a powerful open-source model
-        model_name = "microsoft/DialoGPT-large"  # Using large model for better responses
-        logger.info(f"Loading {model_name} model...")
-        tokenizer = AutoTokenizer.from_pretrained(model_name)
-        model = AutoModelForCausalLM.from_pretrained(model_name)
-        tokenizer.pad_token = tokenizer.eos_token
+        # Initialize model configuration
+        model_config = RythmConfig(
+            vocab_size=128000,
+            hidden_size=5120,
+            intermediate_size=14336,
+            num_hidden_layers=48,
+            num_attention_heads=40,
+            max_position_embeddings=32768
+        )
         
-        # Initialize embeddings for semantic search
-        logger.info("Loading embeddings model...")
-        embeddings_model = SentenceTransformer('all-MiniLM-L6-v2')
+        # Create model instance
+        model = RythmForCausalLM(model_config)
         
-        # Initialize vision model for image analysis
-        logger.info("Loading vision model...")
-        vision_model = pipeline("image-to-text", model="Salesforce/blip-image-captioning-base")
+        # Load trained weights if they exist
+        checkpoint_path = os.path.join("checkpoints", "final_model", "model.pt")
+        if os.path.exists(checkpoint_path):
+            logger.info(f"Loading model weights from {checkpoint_path}")
+            device = 'cuda' if torch.cuda.is_available() else 'cpu'
+            state_dict = torch.load(checkpoint_path, map_location=device)
+            model.load_state_dict(state_dict)
+            model.to(device)
+        else:
+            logger.warning("No pre-trained weights found, using initialized weights")
         
-        logger.info("All models initialized successfully")
+        # Initialize tokenizer
+        tokenizer_config = TokenizerConfig(
+            vocab_size=128000,
+            model_type="sentencepiece",
+            model_file=os.path.join("tokenizer", "rythm_tokenizer.model")
+        )
+        
+        # Ensure tokenizer directory exists
+        os.makedirs("tokenizer", exist_ok=True)
+        
+        # Check if tokenizer model exists, if not, create a new one
+        if not os.path.exists(tokenizer_config.model_file):
+            logger.warning("Tokenizer model not found. Training a new tokenizer...")
+            tokenizer = create_tokenizer()
+            tokenizer.save_pretrained("tokenizer")
+        else:
+            tokenizer = RythmTokenizer(tokenizer_config)
+        
+        # Initialize vision model (using Rythm's vision encoder)
+        if hasattr(model.config, 'vision_hidden_size'):
+            vision_model = model.model.vision_encoder
+            if torch.cuda.is_available():
+                vision_model.to('cuda')
+        else:
+            logger.warning("No vision encoder configured in the model")
+        
+        logger.info("Rythm AI models loaded successfully!")
         
     except Exception as e:
-        logger.error(f"Error initializing models: {e}")
-        raise e  # Don't fallback, raise the error
+        logger.error(f"Critical error initializing models: {e}")
+        raise RuntimeError(f"Model initialization failed: {e}")
 
 async def search_web(query: str, num_results: int = 5) -> List[Dict]:
     """
@@ -282,8 +303,8 @@ def enhance_prompt_with_company_context(message: str) -> str:
     
     return context + message
 
-async def generate_ai_response(message: str, web_search: bool = False, temperature: float = 0.7, conversation_id: str = None) -> Dict:
-    """Generate AI response with optional web search - USING ACTUAL MODEL"""
+async def generate_ai_response(message: str, web_search: bool = False, temperature: float = 0.7, conversation_id: str = None, max_tokens: int = None) -> Dict:
+    """Generate AI response with optional web search using Rythm AI model"""
     
     sources = None
     enhanced_prompt = message
@@ -293,7 +314,7 @@ async def generate_ai_response(message: str, web_search: bool = False, temperatu
         history = conversation_history[conversation_id]
         # Build context from history (last 3 exchanges)
         context_parts = []
-        for h in history[-6:]:  # Last 3 exchanges (user + assistant)
+        for h in history[-6:]:
             context_parts.append(f"{h['role']}: {h['content']}")
         if context_parts:
             enhanced_prompt = "\n".join(context_parts) + "\nUser: " + message + "\nAssistant:"
@@ -321,48 +342,55 @@ Please provide a detailed and accurate response based on the search results and 
         if model is None or tokenizer is None:
             logger.error("Models not initialized")
             raise Exception("AI models not properly initialized")
-            
-        # Encode with proper attention mask
-        inputs = tokenizer.encode_plus(
+        
+        # Tokenize input with Rythm tokenizer
+        inputs = tokenizer.encode(
             enhanced_prompt, 
             return_tensors="pt", 
-            max_length=512, 
+            max_length=model.config.max_position_embeddings,
             truncation=True,
-            padding=True,
-            return_attention_mask=True
+            padding=True
         )
         
+        # Move to device
+        device = next(model.parameters()).device
+        input_ids = inputs['input_ids'].to(device)
+        attention_mask = inputs.get('attention_mask', torch.ones_like(input_ids)).to(device)
+        
+        # Generate response using Rythm model's generate method
         with torch.no_grad():
-            outputs = model.generate(
-                input_ids=inputs['input_ids'],
-                attention_mask=inputs['attention_mask'],
-                max_new_tokens=500,  # Generate new tokens, not total length
+            generated_ids = model.generate(
+                input_ids=input_ids,
+                attention_mask=attention_mask,
+                max_length=max_tokens or model.config.max_position_embeddings,
                 temperature=temperature,
-                pad_token_id=tokenizer.eos_token_id,
-                do_sample=True,
+                top_p=0.9,
                 top_k=50,
-                top_p=0.95,
-                num_return_sequences=1,
-                repetition_penalty=1.2  # Reduce repetition
+                do_sample=True,
+                num_return_sequences=1
             )
         
-        # Decode only the generated part (not the input)
-        generated_ids = outputs[0][inputs['input_ids'].shape[-1]:]
-        response = tokenizer.decode(generated_ids, skip_special_tokens=True)
+        # Decode response using Rythm tokenizer
+        response = tokenizer.decode(
+            generated_ids[0], 
+            skip_special_tokens=True
+        )
         
         # Ensure we have a response
         if not response or len(response.strip()) < 5:
-            # Fallback: try with different parameters
-            outputs = model.generate(
-                input_ids=inputs['input_ids'],
-                attention_mask=inputs['attention_mask'],
-                max_new_tokens=200,
+            # Fallback generation with different parameters
+            generated_ids = model.generate(
+                input_ids=input_ids,
+                attention_mask=attention_mask,
+                max_length=max_tokens or model.config.max_position_embeddings,
                 temperature=0.9,
-                pad_token_id=tokenizer.eos_token_id,
+                top_p=0.95,
                 do_sample=True
             )
-            generated_ids = outputs[0][inputs['input_ids'].shape[-1]:]
-            response = tokenizer.decode(generated_ids, skip_special_tokens=True)
+            response = tokenizer.decode(
+                generated_ids[0], 
+                skip_special_tokens=True
+            )
     
     except Exception as e:
         logger.error(f"Error generating response: {e}")
@@ -407,7 +435,8 @@ async def root():
             "Image Analysis",
             "File Upload",
             "Auth0 Authentication"
-        ]
+        ],
+        "rythm_vision_description": "Rythm Vison should be a  productivity tool that tackles complex projects on your behalf. It can craft everything from reports and spreadsheets to dashboards and simple web applications - all backed by extensive research and analysis. Rythm Vison should  uses tools like deep web browsing, code execution, and chart and image creation to assemble content that would previously have taken days to complete."
     }
 
 @app.post("/api/chat", response_model=ChatResponse)
@@ -419,7 +448,8 @@ async def chat(request: ChatRequest):
             request.message,
             web_search=request.search_web if request.search_web is not None else False,
             temperature=request.temperature if request.temperature is not None else 0.7,
-            conversation_id=request.conversation_id
+            conversation_id=request.conversation_id,
+            max_tokens=request.max_tokens
         )
         
         response_text = result['response']
@@ -431,7 +461,7 @@ async def chat(request: ChatRequest):
             pdf_content = generate_pdf(response_text)
             # In production, save to cloud storage
             pdf_filename = f"response_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
-            with open(f"outputs/{pdf_filename}", "wb") as f:
+            with open(os.path.join("outputs", pdf_filename), "wb") as f:
                 f.write(pdf_content)
             pdf_url = f"/api/download/{pdf_filename}"
         
@@ -453,24 +483,85 @@ async def chat(request: ChatRequest):
 
 @app.post("/api/analyze-image")
 async def analyze_image(file: UploadFile = File(...), question: Optional[str] = Form(None)):
-    """Analyze uploaded image"""
+    """Analyze uploaded image using Rythm AI vision encoder"""
     try:
         # Read image
         contents = await file.read()
         image = Image.open(io.BytesIO(contents))
         
-        # Analyze with vision model
-        if vision_model:
-            result = vision_model(image)
-            description = result[0]['generated_text'] if result else "Unable to analyze image"
-        else:
-            description = "Image analysis model is being initialized. Please try again."
+        # Convert image to tensor for Rythm vision encoder
         
-        # If user asked a specific question
+        # Ensure vision model is available
+        if vision_model is None:
+            raise HTTPException(status_code=500, detail="Vision encoder not initialized")
+        
+        device = next(model.parameters()).device
+        # Prepare image for vision encoder
+        transform = transforms.Compose([
+            transforms.Resize((model.config.vision_image_size, model.config.vision_image_size)),
+            transforms.ToTensor(),
+            transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+        ])
+        
+        # Convert PIL image to tensor
+        pixel_values = transform(image).unsqueeze(0).to(device)
+        
+        # Analyze with Rythm vision encoder
+        with torch.no_grad():
+            vision_features = vision_model(pixel_values)
+        
+        # Generate description using language model
+        description_prompt = f"Describe the contents of this image in detail."
+        
+        # Tokenize the prompt
+        inputs = tokenizer.encode(
+            description_prompt, 
+            return_tensors="pt", 
+            max_length=512,
+            truncation=True
+        )
+        
+        # Combine vision features with text input
+        input_ids = inputs['input_ids'].to(device)
+        
+        # Generate description
+        generated_ids = model.generate(
+            input_ids=input_ids,
+            pixel_values=pixel_values,
+            max_length=256,
+            temperature=0.7,
+            top_p=0.9,
+            do_sample=True
+        )
+        
+        # Decode description
+        description = tokenizer.decode(generated_ids[0], skip_special_tokens=True)
+        
+        # If user asked a specific question, augment the description
         if question:
-            response = f"Image Analysis: {description}\n\nRegarding your question '{question}': Based on the image, {description}"
+            question_prompt = f"Given the image description: {description}\nAnswer this specific question: {question}"
+            
+            # Tokenize the question prompt
+            question_inputs = tokenizer.encode(
+                question_prompt, 
+                return_tensors="pt", 
+                max_length=1024,
+                truncation=True
+            )
+            
+            # Generate answer
+            answer_ids = model.generate(
+                input_ids=question_inputs['input_ids'].to(device),
+                pixel_values=pixel_values,
+                max_length=256,
+                temperature=0.7,
+                top_p=0.9,
+                do_sample=True
+            )
+            
+            response = tokenizer.decode(answer_ids[0], skip_special_tokens=True)
         else:
-            response = f"Image Analysis: {description}"
+            response = description
         
         return {
             "analysis": response,
@@ -496,10 +587,24 @@ async def search(request: WebSearchRequest):
         logger.error(f"Search error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.post("/api/deepsearch")
+async def deepsearch(request: WebSearchRequest):
+    """Perform deep web search"""
+    try:
+        results = await search_web(request.query, request.num_results, deep_search=True)
+        return {
+            "query": request.query,
+            "results": results,
+            "timestamp": datetime.now().isoformat()
+        }
+    except Exception as e:
+        logger.error(f"Search error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 @app.get("/api/download/{filename}")
 async def download_file(filename: str):
     """Download generated PDF"""
-    file_path = f"outputs/{filename}"
+    file_path = os.path.join("outputs", filename)
     if os.path.exists(file_path):
         return FileResponse(
             file_path,
@@ -516,12 +621,12 @@ async def upload_file(file: UploadFile = File(...)):
         contents = await file.read()
         
         # Save file
-        upload_path = f"uploads/{file.filename}"
+        upload_path = os.path.join("uploads", file.filename)
         with open(upload_path, "wb") as f:
             f.write(contents)
         
         # Process based on file type
-        if file.filename.endswith(('.txt', '.md')):
+        if file.filename.endswith((".txt", ".md")):
             text_content = contents.decode('utf-8')
             return {
                 "filename": file.filename,
@@ -529,7 +634,7 @@ async def upload_file(file: UploadFile = File(...)):
                 "status": "uploaded",
                 "message": "File uploaded successfully. You can now ask questions about this content."
             }
-        elif file.filename.endswith(('.pdf')):
+        elif file.filename.endswith((".pdf")):
             return {
                 "filename": file.filename,
                 "status": "uploaded",
@@ -562,21 +667,17 @@ if __name__ == "__main__":
     os.makedirs("uploads", exist_ok=True)
     os.makedirs("checkpoints", exist_ok=True)
     
-    print("""\n╔══════════════════════════════════════════════════════════════╗
-║           AlgoRythm AI Europa Backend Starting...           ║
-║                                                              ║
-║  Company: AlgoRythm Tech, Hyderabad                        ║
-║  CEO & Founder: Sri Aasrith Souri Kompella                 ║
-║  Model: Europa 8B                                          ║
-║                                                              ║
-║  Backend will run continuously. Press Ctrl+C to stop.       ║
-╚══════════════════════════════════════════════════════════════╝\n""")
+    print("AlgoRythm AI Europa Backend Starting...")
+    print("Company: AlgoRythm Tech, Hyderabad")
+    print("CEO & Founder: Sri Aasrith Souri Kompella")
+    print("Model: Europa 8B")
+    print("Backend will run continuously. Press Ctrl+C to stop.")
     
-    # Run the server without reload for production
+    # Run the server with reload for development
     uvicorn.run(
-        app,
+        "algorythm_ai_backend:app",
         host="0.0.0.0",
         port=8000,
         log_level="info",
-        reload=False  # Disable reload for stable production
+        reload=True
     )
