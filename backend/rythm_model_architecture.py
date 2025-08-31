@@ -289,35 +289,14 @@ class RythmDecoderLayer(nn.Module):
         past_key_value: Optional[Tuple[torch.Tensor]] = None,
         use_cache: Optional[bool] = False,
         output_attentions: Optional[bool] = False,
-    past_key_value: Optional[Tuple[torch.Tensor]] = None,
-        use_cache: Optional[bool] = False,
-        output_attentions: Optional[bool] = False,
     ) -> Tuple[torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]]:
-        residual = hidden_states
-        hidden_states = self.input_layernorm(hidden_states)
-
-        # Self Attention
-        hidden_states, self_attn_weights, present_key_value = self.self_attn(
-            hidden_states=hidden_states,
-            attention_mask=attention_mask,
-            position_ids=position_ids,
-            past_key_value=past_key_value,
-            output_attentions=output_attentions,
-            use_cache=use_cache,
-        )
-        hidden_states = residual + hidden_states
-
-        # MLP
-        residual = hidden_states
-        hidden_states = self.post_attention_layernorm(hidden_states)
-        hidden_states = self.mlp(hidden_states)
-        hidden_states = residual + hidden_states
-
-        outputs = (hidden_states,)
-        if output_attentions:
-            outputs += (self_attn_weights,)
-        if use_cache:
-            outputs += (present_key_value,)
+        
+        if self.training and self.gradient_checkpointing:
+            outputs = torch.utils.checkpoint.checkpoint(
+                self._forward, hidden_states, attention_mask, position_ids, past_key_value, output_attentions, use_cache
+            )
+        else:
+            outputs = self._forward(hidden_states, attention_mask, position_ids, past_key_value, output_attentions, use_cache)
 
         return outputs
 
