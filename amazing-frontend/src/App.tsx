@@ -42,7 +42,17 @@ function App() {
 		try {
 			await signInWithPopup(auth, googleProvider);
 		} catch (error) {
+			setError('Error signing in with Google. Please try again.');
 			console.error('Error signing in with Google:', error);
+		}
+	};
+
+	const signOut = async () => {
+		try {
+			await auth.signOut();
+		} catch (error) {
+			setError('Error signing out. Please try again.');
+			console.error('Error signing out:', error);
 		}
 	};
 
@@ -66,7 +76,10 @@ function App() {
 	const chatBoxRef = useRef<HTMLDivElement>(null);
 	const [userName, setUserName] = useState('');
 	const [agreed, setAgreed] = useState(false);
-	const [modelChecks, setModelChecks] = useState<{[key:string]: boolean}>({});
+	const [modelChecks, setModelChecks] = useState<{[key:string]: boolean}>(() => {
+        const savedChecks = localStorage.getItem('modelChecks');
+        return savedChecks ? JSON.parse(savedChecks) : {};
+    });
 
 	useEffect(() => {
 		const checkBackend = async () => {
@@ -80,7 +93,9 @@ function App() {
 		checkBackend();
 	}, []);
 
-	// No auth effect needed
+	useEffect(() => {
+        localStorage.setItem('modelChecks', JSON.stringify(modelChecks));
+    }, [modelChecks]);
 
 	useEffect(() => {
 		const count = localStorage.getItem('otherModelQueries');
@@ -158,6 +173,7 @@ function App() {
 							<div className="gemini-logo-row">
 								<span className="gemini-logo">🔮</span>
 								<span className="gemini-title">Rythm AI Europa</span>
+								{user && <button onClick={signOut} className="gemini-btn google">Sign Out</button>}
 							</div>
 							{!user && (
 								<div className="gemini-auth-box">
@@ -166,7 +182,7 @@ function App() {
 									</button>
 								</div>
 							)}
-							{(!userName || !agreed) ? (
+							{user && (!userName || !agreed) ? (
 								<div className="gemini-auth-box">
 									<input className="gemini-input" type="text" value={userName} onChange={e => setUserName(e.target.value)} placeholder="Enter your name" required />
 									<div className="gemini-tc-box">
@@ -185,7 +201,7 @@ function App() {
 									</div>
 								</div>
 							) : null}
-							{(userName && agreed) && (
+							{user && (userName && agreed) && (
 								<div className="gemini-model-row">
 									<label htmlFor="model-select">Model:</label>
 									<select
@@ -193,7 +209,7 @@ function App() {
 										id="model-select"
 										value={selectedModel}
 										onChange={(e: ChangeEvent<HTMLSelectElement>) => setSelectedModel(e.target.value)}
-										disabled={otherModelQueries <= 0}
+										disabled={otherModelQueries <= 0 && selectedModel !== 'rythm'}
 									>
 										{MODELS.filter(m => modelChecks[m.value]).map((m) => (
 											<option key={m.value} value={m.value} disabled={otherModelQueries <= 0 && m.value !== 'rythm'}>
@@ -214,7 +230,7 @@ function App() {
 								</div>
 							)}
 						</header>
-				{(userName && agreed) && (
+				{user && (userName && agreed) && (
 					<main className="gemini-main">
 						<div className="gemini-chat-box" ref={chatBoxRef}>
 							{messages.map((msg, idx) => {

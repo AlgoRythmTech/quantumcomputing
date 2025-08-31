@@ -470,7 +470,7 @@ class RythmTrainer:
             
             # Save checkpoint
             if self.global_step % self.config.save_steps == 0 and self.is_main_process():
-                self.save_checkpoint()
+                self.save_checkpoint(is_best=False)
         
         return epoch_loss / num_batches
     
@@ -509,9 +509,12 @@ class RythmTrainer:
         
         return avg_loss
     
-    def save_checkpoint(self):
+    def save_checkpoint(self, is_best=False):
         """Save model checkpoint"""
-        checkpoint_dir = Path(self.config.output_dir) / f"checkpoint-{self.global_step}"
+        if is_best:
+            checkpoint_dir = Path(self.config.output_dir) / "best_model"
+        else:
+            checkpoint_dir = Path(self.config.output_dir) / f"checkpoint-{self.global_step}"
         checkpoint_dir.mkdir(parents=True, exist_ok=True)
         
         # Save model state
@@ -537,7 +540,8 @@ class RythmTrainer:
         logger.info(f"Checkpoint saved at {checkpoint_dir}")
         
         # Keep only last N checkpoints
-        self.cleanup_checkpoints()
+        if not is_best:
+            self.cleanup_checkpoints()
     
     def cleanup_checkpoints(self):
         """Remove old checkpoints, keeping only the most recent ones"""
@@ -549,11 +553,40 @@ class RythmTrainer:
                 for file in checkpoint_dir.iterdir():
                     file.unlink()
                 checkpoint_dir.rmdir()
+
+    def load_checkpoint(self, checkpoint_path):
+        """Load checkpoint to resume training"""
+        checkpoint_path = Path(checkpoint_path)
+        if not checkpoint_path.exists():
+            logger.warning(f"Checkpoint path {checkpoint_path} does not exist. Starting from scratch.")
+            return
+
+        logger.info(f"Loading checkpoint from {checkpoint_path}")
+
+        # Load model state
+        model_to_load = self.model.module if hasattr(self.model, 'module') else self.model
+        model_to_load.load_state_dict(torch.load(checkpoint_path / "model.pt"))
+
+        # Load optimizer and scheduler
+        self.optimizer.load_state_dict(torch.load(checkpoint_path / "optimizer.pt"))
+        if self.scheduler:
+            self.scheduler.load_state_dict(torch.load(checkpoint_path / "scheduler.pt"))
+
+        # Load training state
+        with open(checkpoint_path / "training_state.json", 'r') as f:
+            training_state = json.load(f)
+        
+        self.global_step = training_state['global_step']
+        self.epoch = training_state['epoch']
+        self.best_loss = training_state['best_loss']
     
     def train(self):
         """Main training loop"""
         logger.info("Starting training Rythm AI 1.2 Europa...")
         logger.info(f"Training on {self.device}")
+
+        if self.config.resume_from_checkpoint:
+            self.load_checkpoint(self.config.resume_from_checkpoint)
         
         # Create datasets
         train_dataset = FinancialDataset(
@@ -588,7 +621,7 @@ class RythmTrainer:
                 # Save best model
                 if eval_loss < self.best_loss:
                     self.best_loss = eval_loss
-                    self.save_checkpoint()
+                    self.save_checkpoint(is_best=True)
                     logger.info(f"New best model saved with loss: {eval_loss:.4f}")
             
             # Log epoch summary
@@ -639,8 +672,8 @@ def main():
         learning_rate=2e-4,
         num_epochs=3,
         max_seq_length=8192,
-        output_dir="./checkpoints",
-        use_wandb=False,  # Set to True if you have wandb configured
+        output_dir="/content/checkpoints",
+        use_wandb=False,
         use_mixed_precision=torch.cuda.is_available(),
         gradient_checkpointing=True,
         compile_model=False  # Set to True if using PyTorch 2.0+
@@ -660,6 +693,7 @@ def main():
     
     # Start training
     trainer.train()
+
 
 
 if __name__ == "__main__":
