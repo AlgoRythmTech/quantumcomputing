@@ -264,10 +264,11 @@ class RythmMLP(nn.Module):
 
 class RythmDecoderLayer(nn.Module):
     """Transformer decoder layer with optional MoE"""
-    def __init__(self, config: RythmConfig, layer_idx: int):
+    def __init__(self, config: RythmConfig, layer_idx: int, gradient_checkpointing: bool = False):
         super().__init__()
         self.hidden_size = config.hidden_size
         self.layer_idx = layer_idx
+        self.gradient_checkpointing = gradient_checkpointing
         
         self.self_attn = RythmAttention(config, layer_idx=layer_idx)
         
@@ -286,9 +287,23 @@ class RythmDecoderLayer(nn.Module):
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_value: Optional[Tuple[torch.Tensor]] = None,
+        if self.training and self.gradient_checkpointing:
+            outputs = torch.utils.checkpoint.checkpoint(
+                self._forward, hidden_states, attention_mask, position_ids, past_key_value, output_attentions, use_cache
+            )
+        else:
+            outputs = self._forward(hidden_states, attention_mask, position_ids, past_key_value, output_attentions, use_cache)
+
+        return outputs
+
+    def _forward(
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        past_key_value: Optional[Tuple[torch.Tensor]] = None,
         output_attentions: Optional[bool] = False,
         use_cache: Optional[bool] = False,
-    ) -> Tuple[torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]]:
         residual = hidden_states
         hidden_states = self.input_layernorm(hidden_states)
 
@@ -395,10 +410,11 @@ class RythmModel(RythmPreTrainedModel):
         super().__init__()
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
+        self.gradient_checkpointing = False
 
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
         self.layers = nn.ModuleList([
-            RythmDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)
+            RythmDecoderLayer(config, layer_idx, self.gradient_checkpointing) for layer_idx in range(config.num_hidden_layers)
         ])
         self.norm = RythmRMSNorm(config.hidden_size, eps=config.norm_eps)
         
@@ -556,6 +572,9 @@ class RythmForCausalLM(RythmPreTrainedModel):
 
         # Initialize weights
         self.apply(self._init_weights)
+
+    def gradient_checkpointing_enable(self):
+        self.model.gradient_checkpointing = True
 
     def forward(
         self,
