@@ -287,6 +287,10 @@ class RythmDecoderLayer(nn.Module):
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_value: Optional[Tuple[torch.Tensor]] = None,
+        use_cache: Optional[bool] = False,
+        output_attentions: Optional[bool] = False,
+    ) -> Tuple[torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]]:
+        
         if self.training and self.gradient_checkpointing:
             outputs = torch.utils.checkpoint.checkpoint(
                 self._forward, hidden_states, attention_mask, position_ids, past_key_value, output_attentions, use_cache
@@ -304,6 +308,7 @@ class RythmDecoderLayer(nn.Module):
         past_key_value: Optional[Tuple[torch.Tensor]] = None,
         output_attentions: Optional[bool] = False,
         use_cache: Optional[bool] = False,
+    ):
         residual = hidden_states
         hidden_states = self.input_layernorm(hidden_states)
 
