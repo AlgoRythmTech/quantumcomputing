@@ -289,26 +289,10 @@ class RythmDecoderLayer(nn.Module):
         past_key_value: Optional[Tuple[torch.Tensor]] = None,
         use_cache: Optional[bool] = False,
         output_attentions: Optional[bool] = False,
-    ) -> Tuple[torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]]:
-        
-        if self.training and self.gradient_checkpointing:
-            outputs = torch.utils.checkpoint.checkpoint(
-                self._forward, hidden_states, attention_mask, position_ids, past_key_value, output_attentions, use_cache
-            )
-        else:
-            outputs = self._forward(hidden_states, attention_mask, position_ids, past_key_value, output_attentions, use_cache)
-
-        return outputs
-
-    def _forward(
-        self,
-        hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_value: Optional[Tuple[torch.Tensor]] = None,
-        output_attentions: Optional[bool] = False,
+    past_key_value: Optional[Tuple[torch.Tensor]] = None,
         use_cache: Optional[bool] = False,
-    ):
+        output_attentions: Optional[bool] = False,
+    ) -> Tuple[torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]]:
         residual = hidden_states
         hidden_states = self.input_layernorm(hidden_states)
 
@@ -336,6 +320,16 @@ class RythmDecoderLayer(nn.Module):
             outputs += (present_key_value,)
 
         return outputs
+
+    def _forward(
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        past_key_value: Optional[Tuple[torch.Tensor]] = None,
+        output_attentions: Optional[bool] = False,
+        use_cache: Optional[bool] = False,
+    ):
 
 
 class RythmVisionEncoder(nn.Module):
