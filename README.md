@@ -208,14 +208,9 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - **Company**: AlgoRythm Tech
 - **Location**: Hyderabad, India
 - **CEO**: Sri Aasrith Souri Kompella
-- **Email**: contact@algorythm.tech
-- **Website**: [algorythm.tech](https://algorythm.tech)
+- **Email**: helpdeskalgt@gmail.com
 
-## 🏆 Awards & Recognition
 
-- 🥇 First ever teen-built AI startup in India
-- 🚀 Pioneer in accessible AI technology
-- 💡 Innovation Award 2024
 
 ---
 
