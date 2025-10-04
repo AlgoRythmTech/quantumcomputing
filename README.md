@@ -10,7 +10,7 @@
 <div align="center">
   <h3>Created by AlgoRythm Tech</h3>
   <p><strong>The First Ever Teen-Built AI Startup</strong></p>
-  <p>CEO & Founder: Sri Aasrith Souri Kompella | Hyderabad, India</p>
+  <p>| Hyderabad, India</p>
 </div>
 
 ---
@@ -207,7 +207,6 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 - **Company**: AlgoRythm Tech
 - **Location**: Hyderabad, India
-- **CEO**: Sri Aasrith Souri Kompella
 - **Email**: helpdeskalgt@gmail.com
 
 
