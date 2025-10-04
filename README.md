@@ -17,7 +17,7 @@
 
 ## 🌟 Features
 
-- **🤖 Advanced AI Chat** - Powered by state-of-the-art language models
+- **🤖 Advanced AI Chat** - Powered by Rythm Europa, homegrown language model built on 9 billion parameters
 - **🔍 Deep Web Search** - Real-time web search integration
 - **📄 PDF Generation** - Generate professional PDFs from conversations
 - **🖼️ Image Analysis** - Advanced computer vision capabilities
